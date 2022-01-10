@@ -2,64 +2,66 @@
 #include <vector>
 #include <string_view>
 #include <map>
-#include <tuple>
+#include <array>
 
 // definitions, data, and primitive functions
 
-template <typename T, typename RK> std::map<RK, int> enumerate_hash(T iterator) { // RK = return key type, T = iterator type
-  std::map<RK, int> en;
-  int iteration{0};
-  for (auto& val : iterator) { en[static_cast<RK>(val)] = iteration++; }
-  return en;
+template <typename I1, typename I2> std::map<I1, I2> zip2map(const std::vector<I1>& iter1, const std::vector<I2>& iter2) {
+  std::map<I1, I2> zipped;
+  int inst{};
+  for (const I1& v: iter1) { zipped[v] = iter2[inst++]; }
+  return zipped;
 }
 
-template <typename T, typename IND> std::vector<std::tuple<IND, int>> enumerate_ve(T iterator) { // IND = indence type, T = iterator type
-  int len = iterator.length();
-  typedef std::tuple<IND, int> pair;
-  pair en_arr[len];
+template <typename I_Type, typename Con> std::vector<std::array<Con, 2>> zip2same(const I_Type& iter1, const I_Type& iter2) {
+    int len{iter1.size()};
+    std::vector<std::array<Con, 2>> zipped(len);
+    for (int i{}; i < len; i++) { zipped[i] = std::array<Con, 2>{iter1[i], iter2[i]}; }
+    return zipped;
+}
 
-  for (int inst{0}; inst < len; inst++) {
-    pair p{static_cast<IND>(iterator[inst]), inst};
-    en_arr[inst] = p;
+std::vector<int> v_range(const int r1, const int r2 = 0, const int step = 1) {
+  int start{r2 ? r1: 0};
+  int end{r2 ? r2: r1};
+  std::vector<int> range((end-start)/step);
+  int vi{};
+  for (int x{start}; x < end; x += step) {
+    range[vi++] = x;
   }
-
-  return static_cast<std::vector<pair>>(en_arr);
+  return range;
 }
 
-template <typename T> std::vector<T> vector_rep(int repititions, T obj) { // T = repeaded object type
-  T arr[repititions];
-  for (T& ind : arr) {
-    ind = obj;
-  }
-  return static_cast<std::vector<T>>(arr);
+template <typename Con, typename I_Type> std::map<Con, int> enumerate_m(const I_Type& iterable) {
+    int len{static_cast<int>(iterable.size())};
+    std::map<Con, int> as_en{};
+    int i{0};
+    for (const Con& v: iterable) { as_en[v] = i++; }
+    return as_en;
 }
-
 
 typedef std::vector<std::vector<int>> b88;
 
-b88 zero_board{vector_rep<std::vector<int>>(8, vector_rep<int>(8, 0))};
+b88 zero_board(8, std::vector<int>(8, 0));
 
 std::string_view ascii_pieces{"▢♙♘♗♖♕♔♟♞♝♜♛♚"};
 std::string_view start_pgn{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"};
 std::string_view pieces{"_pnbrqkPNBRQK"};
 
-auto piece_id{enumerate_hash<std::string_view, char>(pieces)};
-
-//typedef std::tuple<std::tuple<int, int>, std::tuple<int, int>> move_type;
+auto piece_id{enumerate_m<char, std::string_view>(pieces)};
 
 typedef int move_type[2][2]; // start y, x | end y, x
 
-
+std::vector<move_type> blank_move_list{};
 
 // chess meathods
 
-int get_id(char piece) { return piece_id[piece]; }
+inline int get_id(const char piece) { return piece_id[piece]; }
 
-int get_color(int id) { return static_cast<int>(id > 7); }
+inline int get_color(const int id) { return static_cast<int>(id > 7); }
 
-int get_type(int id) { return ((id - 1) % 6) + 1; }
+inline int get_type(const int id) { return ((id - 1) % 6) + 1; }
 
-b88 from_pgn(std::string_view pgn) {
+b88 from_pgn(const std::string_view pgn) {
   b88 b{zero_board};
   char ex_pgn[72]; int sel{0};
   char underscore{95}; char slash{47};
@@ -84,11 +86,58 @@ b88 from_pgn(std::string_view pgn) {
 
 b88 initial_board{from_pgn(start_pgn)};
 
+// piece movements as vectors of y, x differences
+
+std::vector<std::array<int, 3>> n_p{{1, 1, 0}, {-1, 1, 1}, {1, -1, 2}, {-1, -1, 3}};
+std::vector<std::array<int, 3>> rm{{0, 1, 0}, {1, 0, 1}, {0, -1, 2}, {-1, 0, 3}};
+typedef std::array<int, 2> m_diff;
+
+class movements_by_yx {
+  public:
+    std::vector<m_diff> knight, king;
+    std::vector<std::vector<m_diff>> bishop, rook, queen;
+    movements_by_yx() {
+      for (const auto&[yd, xd, ind]: n_p) {
+        knight.push_back(m_diff{2 * yd, xd}); knight.push_back(m_diff{yd, 2 * xd});
+        king.push_back(m_diff{yd, yd + xd}); king.push_back(m_diff{yd + xd, xd});
+        for (int x{1}; x < 9; x++) { bishop[ind].push_back(m_diff{x * yd, x * xd}); }
+      }
+      for (const auto&[yd, xd, ind]: rm) { 
+        for (int x{1}; x < 9; x++) { rook[ind].push_back(m_diff{x * yd, x * xd}); }
+      }
+    }
+};
+
+auto movements{movements_by_yx()};
+auto move_tu{std::make_tuple(movements)};
+
 // board meathods
+
+b88 after_move(const b88 b, const move_type m) {
+  b88 new_b{b};
+  new_b[m[1][0]][m[1][1]] = b[m[0][0]][m[0][1]]; new_b[m[0][0]][m[0][1]] = 0;
+  return new_b;
+}
+
+inline void move(b88& b, const move_type m) { b = after_move(b, m); }
+
+std::vector<move_type> av_moves(const b88 board, const int y, const int x, const std::vector<move_type> past_moves) {
+  int piece{board[y][x]}; int type{get_type(piece)}; int color{get_color(piece)};
+  if (type == 1) { // if pawn
+
+  } else if ((type == 2) || (type == 6)) { // if king or knight
+
+  } else {
+    auto mm{std::get<3>(move_tu)};
+  }
+}
 
 class Cboard {
   public:
-    Cboard() 
+    Cboard(int t = 1, b88 set_board = initial_board, std::vector<move_type> moves = blank_move_list) {
+      turn = t; board = set_board; move_arr = moves;
+    }
+
     b88 board;
     int turn{};
     std::vector<move_type> move_arr;
