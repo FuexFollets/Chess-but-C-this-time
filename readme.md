@@ -18,3 +18,10 @@ Piece colors are:
 |Black|White|
 |-----|-----|
 |0|1|
+
+## Move types
+
+Moves are defined as `((y, x), (new y, new x))`
+
+Kingside castle is defined as `((9, 9), (9, 9))`
+Queenside castle is defned as `((10, 10), (10, 10))`

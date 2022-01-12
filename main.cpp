@@ -6,6 +6,11 @@
 
 // definitions, data, and primitive functions
 
+class exec_outer_main {
+  public:
+    exec_outer_main(void (*exfn)()) { exfn(); }
+};
+
 template <typename I1, typename I2> std::map<I1, I2> zip2map(const std::vector<I1>& iter1, const std::vector<I2>& iter2) {
   std::map<I1, I2> zipped;
   int inst{};
@@ -39,6 +44,22 @@ template <typename Con, typename I_Type> std::map<Con, int> enumerate_m(const I_
     return as_en;
 }
 
+template <typename Con, int ui_len> void appen_arr(std::array<Con, ui_len>& arr, const Con obj) {
+  for (Con& val: arr) {
+    if (!val) { val = obj; return;}
+  }
+}
+
+template <typename I, typename Con> std::vector<Con> to_vect(I iter) {
+  std::vector<Con> vect(iter.size()); int ind{};
+  for (const Con& val: iter) {
+    vect[ind++] = val;
+  }
+  return vect;
+} 
+
+template <typename Con> inline std::vector<Con> extend_v() {}
+
 typedef std::vector<std::vector<int>> b88;
 
 b88 zero_board(8, std::vector<int>(8, 0));
@@ -49,7 +70,7 @@ std::string_view pieces{"_pnbrqkPNBRQK"};
 
 auto piece_id{enumerate_m<char, std::string_view>(pieces)};
 
-typedef int move_type[2][2]; // start y, x | end y, x
+typedef std::array<std::array<int, 2>, 2> move_type; // start y, x | end y, x
 
 std::vector<move_type> blank_move_list{};
 
@@ -88,28 +109,43 @@ b88 initial_board{from_pgn(start_pgn)};
 
 // piece movements as vectors of y, x differences
 
-std::vector<std::array<int, 3>> n_p{{1, 1, 0}, {-1, 1, 1}, {1, -1, 2}, {-1, -1, 3}};
-std::vector<std::array<int, 3>> rm{{0, 1, 0}, {1, 0, 1}, {0, -1, 2}, {-1, 0, 3}};
-typedef std::array<int, 2> m_diff;
+namespace mov {
+  namespace {
+    typedef struct {
+      int ym; int xm; int ind;
+    } yxd;
+    
+    std::vector<yxd> n_p{{1, 1, 0}, {-1, 1, 1}, {1, -1, 2}, {-1, -1, 3}};
+    std::vector<yxd> rm{{0, 1, 0}, {1, 0, 1}, {0, -1, 2}, {-1, 0, 3}};
+  }
 
-class movements_by_yx {
-  public:
-    std::vector<m_diff> knight, king;
-    std::vector<std::vector<m_diff>> bishop, rook, queen;
-    movements_by_yx() {
-      for (const auto&[yd, xd, ind]: n_p) {
-        knight.push_back(m_diff{2 * yd, xd}); knight.push_back(m_diff{yd, 2 * xd});
-        king.push_back(m_diff{yd, yd + xd}); king.push_back(m_diff{yd + xd, xd});
-        for (int x{1}; x < 9; x++) { bishop[ind].push_back(m_diff{x * yd, x * xd}); }
-      }
-      for (const auto&[yd, xd, ind]: rm) { 
-        for (int x{1}; x < 9; x++) { rook[ind].push_back(m_diff{x * yd, x * xd}); }
-      }
-    }
-};
+  typedef struct {
+    int yd;
+    int xd;
+  } m_diff;
 
-auto movements{movements_by_yx()};
-auto move_tu{std::make_tuple(movements)};
+  std::vector<m_diff> knight, king;
+  std::vector<std::vector<m_diff>> bishop, rook, queen;
+  std::map<int, std::vector<m_diff>&> m1{{2, knight}, {6, king}};
+  std::map<int, std::vector<std::vector<m_diff>>&> m2{{3, bishop}, {4, rook}, {5, queen}};
+  inline void initialize_v(); 
+
+}
+
+inline void mov::initialize_v() {
+  for (const auto&[yd, xd, ind]: n_p) {
+    knight.push_back(m_diff{2 * yd, xd}); knight.push_back(m_diff{yd, 2 * xd});
+    king.push_back(m_diff{yd, yd + xd}); king.push_back(m_diff{yd + xd, xd});
+    for (int x{1}; x < 9; x++) { bishop[ind].push_back(m_diff{x * yd, x * xd}); }
+  }
+  for (const auto&[yd, xd, ind]: rm) {
+    for (int x{1}; x < 9; x++) { rook[ind].push_back(m_diff{x * yd, x * xd}); }
+  }
+  queen = rook;
+  queen.insert(queen.end(), bishop.begin(), bishop.end());
+}
+
+auto _1{exec_outer_main(&(mov::initialize_v))};
 
 // board meathods
 
@@ -121,26 +157,48 @@ b88 after_move(const b88 b, const move_type m) {
 
 inline void move(b88& b, const move_type m) { b = after_move(b, m); }
 
-std::vector<move_type> av_moves(const b88 board, const int y, const int x, const std::vector<move_type> past_moves) {
+std::vector<move_type> square_moves(const b88 board, const int y, const int x, const std::vector<move_type> past_moves) {
   int piece{board[y][x]}; int type{get_type(piece)}; int color{get_color(piece)};
+  std::vector<move_type> valid_moves;
   if (type == 1) { // if pawn
+     
+
 
   } else if ((type == 2) || (type == 6)) { // if king or knight
-
+    std::vector<mov::m_diff>& space_iter{mov::m1[type]};
+    for (const auto&[yd, xd]: space_iter) {
+      int space{board[y + yd][x + xd]};
+      if (!(space) || (color ^ get_color(space))) { valid_moves.push_back(move_type{{{y, x}, {y + yd, x + xd}}}); }
+    }
+    
   } else {
-    auto mm{std::get<3>(move_tu)};
+    std::vector<std::vector<mov::m_diff>>& space_iter{mov::m2[type]};
+    for (const auto& direction: space_iter) {
+      for (const auto&[yd, xd]: direction) {  
+        int space{board[y + yd][x + xd]};
+  
+        if (!space) { valid_moves.push_back(move_type{{{y, x}, {y + yd, x + xd}}}); }
+        else if (get_color(space) ^ color) {
+          valid_moves.push_back(move_type{{{y, x}, {y + yd, x + xd}}});
+          break;
+        } else { break; }
+      }
+    }
   }
+  return valid_moves;
 }
 
 class Cboard {
   public:
     Cboard(int t = 1, b88 set_board = initial_board, std::vector<move_type> moves = blank_move_list) {
-      turn = t; board = set_board; move_arr = moves;
+      turn = t;
+      board = set_board;
+      move_arr = moves;
     }
 
-    b88 board;
+    b88 board{};
     int turn{};
-    std::vector<move_type> move_arr;
+    std::vector<move_type> move_arr{};
 };
 
 int main() {
