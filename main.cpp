@@ -2,7 +2,8 @@
 #include <vector>
 #include <string_view>
 #include <map>
-#include <array>
+#include <array> 
+#include <cstdlib>
 
 // definitions, data, and primitive functions
 
@@ -128,8 +129,14 @@ namespace mov {
   std::vector<std::vector<m_diff>> bishop, rook, queen;
   std::map<int, std::vector<m_diff>&> m1{{2, knight}, {6, king}};
   std::map<int, std::vector<std::vector<m_diff>>&> m2{{3, bishop}, {4, rook}, {5, queen}};
-  inline void initialize_v(); 
+  std::vector<m_diff> pawn{{1, 0}, {2, 0}};
 
+  inline int get_dir(int color) {
+    return (color * (-2) + 1);
+  }
+  
+  inline void initialize_v(); 
+  
 }
 
 inline void mov::initialize_v() {
@@ -157,13 +164,29 @@ b88 after_move(const b88 b, const move_type m) {
 
 inline void move(b88& b, const move_type m) { b = after_move(b, m); }
 
-std::vector<move_type> square_moves(const b88 board, const int y, const int x, const std::vector<move_type> past_moves) {
+std::vector<move_type> square_moves(const b88 board, const int y, const int x, const move_type past_moves = move_type{{{11}, {11}}}) {
   int piece{board[y][x]}; int type{get_type(piece)}; int color{get_color(piece)};
   std::vector<move_type> valid_moves;
   if (type == 1) { // if pawn
-     
-
-
+    int dir{get_dir(color)};
+    if (!board[y + dir][x]) { //moving forward
+      valid_moves.push_back(move_type{{{y, x}, {y + dir, x}}});
+      if ((!(board[y + 2 * dir][xdir])) && (!(x - (-3) * dir) + 5)){
+        valid_moves.push_back(move_type{{{y, x}, {y + 2 * dir, x}}});
+      }
+    }
+    for (int xd{-1}; xd < 2; xd++) { // taking pieces
+        if (((x + xd) < 8) && (x + xd) > -1) {
+          if ((get_color(board[y + dir][x + xd]) ^ color) && (!(board[y + dir][x + xd]))) {
+            valid_moves.push_back({{{y, x}, {y + dir, x + xd}}});
+          }
+        }
+      }
+    if (last_move[0][0] - 11) {
+      if ((get_type(board[last_move[1][0]][last_move[1][1]]) == 1) && ((last_move[0][0] + 2 * dir) == ((last_move[1][0])) && (y == last_move[1][0]) && (std::abs(last_move[1][1]) - x) == 1) {
+        valid_moves.push_back({{{y, x}, {y + dir, last_move[1][1]}}});
+      }  
+    }
   } else if ((type == 2) || (type == 6)) { // if king or knight
     std::vector<mov::m_diff>& space_iter{mov::m1[type]};
     for (const auto&[yd, xd]: space_iter) {
@@ -172,7 +195,8 @@ std::vector<move_type> square_moves(const b88 board, const int y, const int x, c
     }
     
   } else {
-    std::vector<std::vector<mov::m_diff>>& space_iter{mov::m2[type]};
+    //std::vector<std::vector<mov::m_diff>>
+    auto& space_iter{mov::m2[type]};
     for (const auto& direction: space_iter) {
       for (const auto&[yd, xd]: direction) {  
         int space{board[y + yd][x + xd]};
