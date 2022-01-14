@@ -61,9 +61,10 @@ template <typename I, typename Con> std::vector<Con> to_vect(I iter) {
 
 template <typename Con> inline std::vector<Con> extend_v() {}
 
-typedef std::vector<std::vector<int>> b88;
+//typedef std::vector<std::vector<int>> b88;
+typedef std::array<std::array<int, 8>, 8> b88;
 
-b88 zero_board(8, std::vector<int>(8, 0));
+b88 zero_board{};//(8, std::vector<int>(8, 0));
 
 std::string_view ascii_pieces{"▢♙♘♗♖♕♔♟♞♝♜♛♚"};
 std::string_view start_pgn{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"};
@@ -74,6 +75,10 @@ auto piece_id{enumerate_m<char, std::string_view>(pieces)};
 typedef std::array<std::array<int, 2>, 2> move_type; // start y, x | end y, x
 
 std::vector<move_type> blank_move_list{};
+
+auto __{[](){
+  blank_move_list.push_back(move_type{{{11, 11}, {11, 11}}});
+}};
 
 // chess meathods
 
@@ -98,7 +103,7 @@ b88 from_pgn(const std::string_view pgn) {
   }
 
   int row{0}; int X{0};
-  for (char& v : ex_pgn) {
+  for (const char& v: ex_pgn) {
     if (v - slash) {
       b[row][X++] = get_id(v);
     } else { row++; X = 0; }
@@ -164,14 +169,26 @@ b88 after_move(const b88 b, const move_type m) {
 
 inline void move(b88& b, const move_type m) { b = after_move(b, m); }
 
-std::vector<move_type> square_moves(const b88 board, const int y, const int x, const move_type past_moves = move_type{{{11}, {11}}}) {
+int has_king(const b88 board, const int color) {
+  for (const std::array<int, 8>& row: board) {
+    for (const int& id: row) {
+      if ((get_type(id) == 6) && (get_color(id) == color)) {
+        return 1;
+      }
+    }
+  }
+  return 0;
+}
+
+std::vector<move_type> square_moves(const b88 board, const int y, const int x, const std::vector<move_type> past_moves = blank_move_list) {
+  auto last_move{past_moves[0]};
   int piece{board[y][x]}; int type{get_type(piece)}; int color{get_color(piece)};
   std::vector<move_type> valid_moves;
   if (type == 1) { // if pawn
-    int dir{get_dir(color)};
+    int dir{mov::get_dir(color)};
     if (!board[y + dir][x]) { //moving forward
       valid_moves.push_back(move_type{{{y, x}, {y + dir, x}}});
-      if ((!(board[y + 2 * dir][xdir])) && (!(x - (-3) * dir) + 5)){
+      if ((!(board[y + 2 * dir][x])) && (!(x - (-3) * dir) + 5)){
         valid_moves.push_back(move_type{{{y, x}, {y + 2 * dir, x}}});
       }
     }
@@ -183,7 +200,7 @@ std::vector<move_type> square_moves(const b88 board, const int y, const int x, c
         }
       }
     if (last_move[0][0] - 11) {
-      if ((get_type(board[last_move[1][0]][last_move[1][1]]) == 1) && ((last_move[0][0] + 2 * dir) == ((last_move[1][0])) && (y == last_move[1][0]) && (std::abs(last_move[1][1]) - x) == 1) {
+      if ((get_type(board[last_move[1][0]][last_move[1][1]]) == 1) && ((last_move[0][0] + 2 * dir) == ((last_move[1][0])) && (y == last_move[1][0]) && (std::abs(last_move[1][1]) - x) == 1)) {
         valid_moves.push_back({{{y, x}, {y + dir, last_move[1][1]}}});
       }  
     }
@@ -193,7 +210,6 @@ std::vector<move_type> square_moves(const b88 board, const int y, const int x, c
       int space{board[y + yd][x + xd]};
       if (!(space) || (color ^ get_color(space))) { valid_moves.push_back(move_type{{{y, x}, {y + yd, x + xd}}}); }
     }
-    
   } else {
     //std::vector<std::vector<mov::m_diff>>
     auto& space_iter{mov::m2[type]};
@@ -210,6 +226,57 @@ std::vector<move_type> square_moves(const b88 board, const int y, const int x, c
     }
   }
   return valid_moves;
+}
+
+int is_cont(b88 board, int y, int x, int turn) {
+  for (int sel_y{}; sel_y < 8; sel_y++) {
+    for (int sel_x{}; sel_x < 8; sel_x++) {
+      auto opm{square_moves(board, y, x)};
+      for (const auto& move: opm) {
+        if ((move[1][0] == y) && (move[1][1] == x)) {
+          return 1;
+        }
+      }
+    }
+  }
+  return 0;
+}
+
+/*
+
+*/
+
+
+std::vector<move_type> av_moves(const b88 board, const std::vector<move_type> past_moves, const int color) {
+  std::vector<move_type> moves{};
+  for (int y{}; y < 8; y++) {
+    for (int x{}; x < 8; x++) {
+      if (board[y][x]) {
+        if (get_color(board[y][x]) == color) {
+          auto m_for_square{square_moves(board, y, x, past_moves)};
+          moves.insert(moves.end(), m_for_square.begin(), m_for_square.end());
+        }
+      }
+    }
+  }
+
+  for (int side{2}; side < 6; side += 3) {
+    for (int space{}; space < 2; space++) {
+      if (is_cont(board, color * 7, side + space, !color)) {
+        break;
+      } else if (space) {
+        
+int h{(side + 25)/3}        moves.push_back(move_type{{{h, h}, {h, h}}});
+      }
+    }
+  }
+
+  return moves;
+}
+
+std::vector<b88> p_from_pos(const int turn, const b88 board, std::vector<move_type> past_moves) {
+  std::vector<b88> p_pos{}; std::vector<move_type> avm{av_moves(board, past_moves, turn)};
+  
 }
 
 class Cboard {
