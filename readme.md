@@ -25,3 +25,6 @@ Moves are defined as `((y, x), (new y, new x))`
 
 Kingside castle is defined as `((9, 9), (9, 9))`
 Queenside castle is defned as `((10, 10), (10, 10))`
+
+# Other information
+Uses a alot of vectors because they are dynamic. Possible future versions might use an unordered map for optimization.
