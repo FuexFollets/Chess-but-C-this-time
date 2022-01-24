@@ -15,6 +15,18 @@ class exec_outer_main {
     exec_outer_main(void (*exfn)()) { exfn(); }
 };
 
+template <typename T> class t_obj {
+  public:
+    t_obj(T fn) : function(fn) {}
+    T function;
+    std::thread process;
+    void start() {
+      process = std::thread(function);
+    }
+
+    inline void join() { process.join(); }
+};
+
 template <typename Con> class map_set{
   private:
     int appen{0};
@@ -432,28 +444,28 @@ float min_max_eval(const C_node* h_node, int min_max) { // 1=max -1=min
   return mm;
 }
 
-void set_depth_ev(C_node* h_node) {
-  if (h_node->branches.empty() && h_node->eval.init) {
+void set_depth_ev(C_node* h_node, bool& toggle) {
+  if (h_node->branches.empty() && h_node->eval.init && toggle) {
     h_node->eval = init_fl{surface_eval(h_node->node_board.pos), true};
-  } else {
+  } else if (toggle) {
     if (!h_node->branches.as_map[0]->eval.init) {
-      for (auto&[_, node_ptr]: h_node->branches) { set_depth_ev(h_node); }
+      for (auto&[_, node_ptr]: h_node->branches) { set_depth_ev(h_node, toggle); }
     }
     h_node->eval = init_fl{min_max_eval(h_node, get_dir(h_node->turn)), true};
   }
 }
 
-void form_branches(C_node* h_node) {
-  if (h_node->branches.empty()) {
+void form_branches(C_node* h_node, bool& toggle) {
+  if (h_node->branches.empty() && toggle) {
     auto moves{legal_moves(h_node->node_board)}; 
     for (const auto&[_, move]: moves) {
       if (!trunicate()) {
         h_node->add_branch(new C_node(cboard_after_move(h_node->node_board, move), h_node->node_count));
       }
     }
-  } else {
+  } else if (toggle) {
     for (const auto&[_, node]: h_node->branches) {
-      form_branches(node);
+      form_branches(node, toggle);
     }
   }
 }
@@ -495,21 +507,38 @@ class Evaluation_thread {
       main_node = new C_node(cb, &total_nodes);
     }
 
-    void inf_evaluation() {}
-    void inf_forming() {}
+    void start() {
+      std::thread t1([this](){
+        while (is_calc) {
+          set_depth_ev(main_node, is_calc);
+        } return;
+      });
+
+      std::thread t2([this](){
+        while (is_calc) {
+          form_branches(main_node, is_calc);
+        } return;
+      });
+
+      threads = {&t1, &t2};
+    }
+
+    void stop_calc() { is_calc = false; }
 
     void make_move(move_type move) {
+      stop_calc();
       tree_move(main_node, move);
+      start();
     }
 
     int total_nodes;
   private:
     C_node* main_node;
     bool is_calc{false};
+    std::array<std::thread*, 2> threads;
 };
 
 int main() {
-
   
   std::cout << "Compilation Sucessful\n";
   return 0;
