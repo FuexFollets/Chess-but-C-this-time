@@ -7,13 +7,11 @@
 #include <stdexcept>
 #include <unordered_map>
 #include <thread>
+#include <chrono>
+#include <string>
+
 
 // definitions, data, and primitive functions
-
-class exec_outer_main {
-  public:
-    exec_outer_main(void (*exfn)()) { exfn(); }
-};
 
 template <typename T> class t_obj {
   public:
@@ -27,14 +25,15 @@ template <typename T> class t_obj {
     inline void join() { process.join(); }
 };
 
-template <typename Con> class map_set{
+template <typename Con> class map_set {
   private:
     int appen{0};
   public:
     std::unordered_map<int, Con> as_map;  
     void append(Con obj) {
-      this->as_map[appen++] = obj;
+      as_map[appen++] = obj;
     }
+
     void append_set(map_set<Con> ap_set) {
       for (const auto&[_, obj]: ap_set) {
         append(obj);
@@ -45,33 +44,28 @@ template <typename Con> class map_set{
     inline auto end() { return as_map.end(); }
     inline bool empty() { return as_map.empty(); }
     inline void erase(int key) { as_map.erase(key); }
+    
+    friend std::ostream& operator<< (std::ostream& out, map_set set) {
+        out << "{ ";
+        for (const auto&[ind, obj]: set) {
+            out << '(' << ind << ": " << obj << "), ";
+        }
+        out << '}';
+        return out;
+    }
 };
-
-
-template <typename I1, typename I2> std::map<I1, I2> zip2map(const std::vector<I1>& iter1, const std::vector<I2>& iter2) {
-  std::map<I1, I2> zipped;
-  int inst{};
-  for (const I1& v: iter1) { zipped[v] = iter2[inst++]; }
-  return zipped;
-}
  
-template <typename I_Type, typename Con> std::vector<std::array<Con, 2>> zip2same(const I_Type& iter1, const I_Type& iter2) {
-    int len{iter1.size()};
-    std::vector<std::array<Con, 2>> zipped(len);
-    for (int i{}; i < len; i++) { zipped[i] = std::array<Con, 2>{iter1[i], iter2[i]}; }
-    return zipped;
-}
- 
-std::vector<int> v_range(const int r1, const int r2 = 0, const int step = 1) {
-  int start{r2 ? r1: 0};
-  int end{r2 ? r2: r1};
-  std::vector<int> range((end-start)/step);
-  int vi{};
-  for (int x{start}; x < end; x += step) {
-    range[vi++] = x;
-  }
-  return range;
-}
+template <typename T, int Len> class append_arr {
+    private:
+        int append_ind{};
+    public:
+        std::array<T, Len> this_arr;
+        inline auto begin() { return this_arr.begin(); }
+        inline auto end() { return this_arr.end(); }
+        inline void append(T obj) {
+           this_arr[append_ind++] = obj;
+       }
+};
  
 template <typename Con, typename I_Type> std::map<Con, int> enumerate_m(const I_Type& iterable) {
     int len{static_cast<int>(iterable.size())};
@@ -81,32 +75,17 @@ template <typename Con, typename I_Type> std::map<Con, int> enumerate_m(const I_
     return as_en;
 }
  
-template <typename Con, int ui_len> void appen_arr(std::array<Con, ui_len>& arr, const Con obj) {
-  for (Con& val: arr) {
-    if (!val) { val = obj; return;}
-  }
-}
- 
-template <typename I, typename Con> std::vector<Con> to_vect(I iter) {
-  std::vector<Con> vect(iter.size()); int ind{};
-  for (const Con& val: iter) {
-    vect[ind++] = val;
-  }
-  return vect;
-}
- 
-template <typename Con> inline std::vector<Con> extend_v() {}
- 
+
 //typedef std::vector<std::vector<int>> b88;
 typedef std::array<std::array<int, 8>, 8> b88;
  
 b88 zero_board{};//(8, std::vector<int>(8, 0));
  
-std::string_view ascii_pieces{"▢♙♘♗♖♕♔♟♞♝♜♛♚"};
-std::string_view start_pgn{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"};
-std::string_view pieces{"_pnbrqkPNBRQK"};
+std::string ascii_pieces{"▢♙♘♗♖♕♔♟♞♝♜♛♚"};
+std::string start_pgn{"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR"};
+std::string pieces{"_pnbrqkPNBRQK"};
  
-auto piece_id{enumerate_m<char, std::string_view>(pieces)};
+auto piece_id{enumerate_m<char, std::string>(pieces)};
  
 //typedef std::array<std::array<int, 2>, 2> move_type; // start y, x | end y, x
 
@@ -119,6 +98,11 @@ struct move_type {
   friend bool operator==(move_type m1, move_type m2) {
     return ((m1.y == m2.y) && (m1.x == m2.x) && (m1.new_y == m2.new_y) && (m1.new_x == m2.new_x));
   }
+
+  inline friend std::ostream& operator<< (std::ostream& out, move_type move) {
+      out << '[' << move.y << ' ' << move.x << "][" << move.new_y << ' ' << move.new_x << ']';
+      return out;
+  }
 };
 
 std::vector<move_type> blank_move_list{};
@@ -128,7 +112,9 @@ auto __{[](){
 }};
  
 // chess meathods
- 
+
+inline bool c_is_int(char x) { return ((-1 < (x - '0')) && ((x - '0') < 10)); }
+
 inline int get_id(const char piece) { return piece_id[piece]; }
  
 inline int get_color(const int id) { return static_cast<int>(id > 7); }
@@ -139,26 +125,29 @@ inline int get_dir(const int turn) { return (turn * (-2) + 1); }
 
 inline int get_c(const int color) { return color * 2 - 1; }
 
-b88 from_pgn(const std::string_view pgn) {
-  b88 b{zero_board};
-  char ex_pgn[72]; int sel{0};
-  char underscore{95}; char slash{47};
-  for (auto& c : pgn) {
-    if (isdigit(c)) {
-      int d{c - '0'};
-      for (int x; x < d; x++) { ex_pgn[sel++] = underscore; }
-    } else {
-      ex_pgn[sel++] = c;
+inline bool ib(const int x, const int h, const int l) { return ((x < h) && (x > l)); }
+
+b88 from_pgn(const std::string pgn) {
+  b88 b;
+  std::array<int, 64> as_arr{};
+  int sel{0};
+  char slash{47};
+
+  for (const char& c: pgn) {
+    if (c != slash) {
+      if (c_is_int(c)) {
+        sel += c - '0';
+      } else {
+        as_arr[sel++] = piece_id[c];
+      }
     }
-    ex_pgn[sel++] = slash;
   }
- 
-  int row{0}; int X{0};
-  for (const char& v: ex_pgn) {
-    if (v - slash) {
-      b[row][X++] = get_id(v);
-    } else { row++; X = 0; }
-  }
+    for (int row{}; row < 8; row++) {
+        for (int X{}; X < 8; X++) {
+            b[row][X] = as_arr[row * 8 + X];
+        }
+    }
+
   return b;
 }
  
@@ -192,7 +181,7 @@ m_init initialize_diff() {
    
     for (const auto&[yd, xd, ind]: n_p) {
           knight.push_back(m_diff{2 * yd, xd}); knight.push_back(m_diff{yd, 2 * xd});
-          king.push_back(m_diff{yd, yd + xd}); king.push_back(m_diff{yd + xd, xd});
+          
         for (int x{1}; x < 9; x++) { bishop[ind].push_back(m_diff{x * yd, x * xd}); }
         }
         for (const auto&[yd, xd, ind]: rm) {
@@ -200,21 +189,22 @@ m_init initialize_diff() {
         }
         queen = rook;
         queen.insert(queen.end(), bishop.begin(), bishop.end());
- 
-    return m_init{knight, king, bishop, rook, queen};
+
+  for (int x{}; x < 8; x++) {
+    for (int y{}; y < 8; y++) {
+      king.push_back(m_diff{y, x}); king.push_back(m_diff{y, x});
+    }
+  }
+  return m_init{knight, king, bishop, rook, queen};
 }
- 
+
 const auto mov_s{initialize_diff()};
  
 // board methods
 
 class C_board {
   public:
-    C_board(int t = 1, b88 set_board = initial_board, std::vector<move_type> moves = blank_move_list) {
-      turn = t;
-      pos = set_board;
-      move_arr = moves;
-    }
+    C_board(b88 set_board = initial_board, int t = 1, std::vector<move_type> past_moves = blank_move_list) : turn{t}, pos{set_board}, move_arr{past_moves} {}
  
     b88 pos{};
     int turn{};
@@ -224,6 +214,16 @@ class C_board {
     return ((b1.turn == b2.turn) && (b1.pos == b2.pos) && (b1.move_arr == b2.move_arr));
     }
 
+    friend std::ostream& operator<< (std::ostream& out, C_board cb) {
+      out << "turn: " << cb.turn << "\n";
+      for (const auto& row: cb.pos) {
+        for (const int& id: row) {
+          out << id << " ";
+        }
+        out << "\n";
+      }
+      return out;
+    }
 
 };
 
@@ -247,7 +247,7 @@ b88 after_move(const b88 b, const move_type m, const int turn) {
 }
 
 inline C_board cboard_after_move(C_board cb, move_type m) {
-  return C_board(1 - cb.turn, after_move(cb.pos, m, cb.turn), cb.move_arr);
+  return C_board(after_move(cb.pos, m, cb.turn), 1 - cb.turn, cb.move_arr);
 }
 
 int has_king(const b88 board, const int color) {
@@ -398,7 +398,7 @@ int count_ID(const b88 board, const int id) {
   return count;
 }
 
-struct init_fl{
+struct init_fl {
   float val;
   bool init{false};
   init_fl(float val_=0, bool init_=false) :
@@ -501,6 +501,22 @@ void tree_move(C_node* h_node, const move_type move) {
   }
 }
 
+class Chess_game {
+  public:
+    Chess_game(C_board start=C_board()) : board(start) {}
+    C_board board;
+
+    map_set<move_type> possible_moves() {
+      return legal_moves(board);
+    }
+
+    void make_move(move_type m) {
+      
+    }
+
+};
+
+/*
 class Evaluation_thread {
   public:
     Evaluation_thread(C_board cb) {
@@ -508,6 +524,7 @@ class Evaluation_thread {
     }
 
     void start() {
+      
       std::thread t1([this](){
         while (is_calc) {
           set_depth_ev(main_node, is_calc);
@@ -521,9 +538,17 @@ class Evaluation_thread {
       });
 
       threads = {&t1, &t2};
+      
     }
 
-    void stop_calc() { is_calc = false; }
+    void stop_calc() {
+      is_calc = false;
+    }
+
+    void join() {
+      threads[0]->join();
+      threads[1]->join();
+    }
 
     void make_move(move_type move) {
       stop_calc();
@@ -537,9 +562,18 @@ class Evaluation_thread {
     bool is_calc{false};
     std::array<std::thread*, 2> threads;
 };
-
+*/
 int main() {
-  
+
+
+  C_board b;
+  std::cout << b;
+
+  std::cout << '\n';
+  std::cout << square_moves(b.pos, 0, 1);
+
+  std::cout << '\n';
+
   std::cout << "Compilation Sucessful\n";
   return 0;
 }
