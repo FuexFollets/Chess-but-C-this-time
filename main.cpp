@@ -9,6 +9,7 @@
 #include <thread>
 #include <chrono>
 #include <string>
+#include <tuple>
 
 
 // definitions, data, and primitive functions
@@ -92,7 +93,7 @@ auto piece_id{enumerate_m<char, std::string>(pieces)};
 struct move_type {
   int y; int x;
   int new_y; int new_x;
-  move_type(int x_=0, int y_=0, int new_y_=0, int new_x_=0) :
+  move_type(int y_=0, int x_=0, int new_y_=0, int new_x_=0) :
     y{y_}, x{x_}, new_y{new_y_}, new_x{new_x_} {}
 
   friend bool operator==(move_type m1, move_type m2) {
@@ -105,11 +106,7 @@ struct move_type {
   }
 };
 
-std::vector<move_type> blank_move_list{};
- 
-auto __{[](){
-  blank_move_list.push_back(move_type{11, 11, 11, 11});
-}};
+std::vector<move_type> blank_move_list{move_type(11, 11, 11, 11)};
  
 // chess meathods
 
@@ -150,7 +147,7 @@ b88 from_pgn(const std::string pgn) {
 
   return b;
 }
- 
+
 b88 initial_board{from_pgn(start_pgn)};
  
 // piece movements as vectors of y, x differences
@@ -159,47 +156,73 @@ typedef struct {
   int yd;
   int xd;
 } m_diff;
- 
-struct m_init {
-    std::vector<m_diff> knight, king;
-    std::vector<std::vector<m_diff>> bishop, rook, queen;
- 
-    std::map<int, std::vector<m_diff>&> m1{{2, knight}, {6, king}};
-    std::map<int, std::vector<std::vector<m_diff>>&> m2{{3, bishop}, {4, rook}, {5, queen}};
-};
- 
-m_init initialize_diff() {
-    typedef struct {
-        int ym; int xm; int ind;
-    } yxd;
-   
-    std::array<yxd, 4> n_p{{{1, 1, 0}, {-1, 1, 1}, {1, -1, 2}, {-1, -1, 3}}};
-    std::array<yxd, 4> rm{{{0, 1, 0}, {1, 0, 1}, {0, -1, 2}, {-1, 0, 3}}};
-   
-    std::vector<m_diff> knight, king;
-    std::vector<std::vector<m_diff>> bishop(4), rook(4), queen;
-   
-    for (const auto&[yd, xd, ind]: n_p) {
-          knight.push_back(m_diff{2 * yd, xd}); knight.push_back(m_diff{yd, 2 * xd});
-          
-        for (int x{1}; x < 9; x++) { bishop[ind].push_back(m_diff{x * yd, x * xd}); }
-        }
-        for (const auto&[yd, xd, ind]: rm) {
-            for (int x{1}; x < 9; x++) { rook[ind].push_back(m_diff{x * yd, x * xd}); }
-        }
-        queen = rook;
-        queen.insert(queen.end(), bishop.begin(), bishop.end());
 
-  for (int x{}; x < 8; x++) {
-    for (int y{}; y < 8; y++) {
-      king.push_back(m_diff{y, x}); king.push_back(m_diff{y, x});
+template <typename T, int len> struct App_arr {
+  void append(T obj) { as_arr[append_index++] = obj; }
+  std::array<T, len> as_arr;
+
+  template <int L> void append(std::array<T, L> obj_arr) {
+    for (const auto&v: obj_arr) {
+      append(v);
     }
   }
-  return m_init{knight, king, bishop, rook, queen};
-}
+  inline auto begin() { return as_arr.begin(); }
+  inline auto end() { return as_arr.end(); }
 
-const auto mov_s{initialize_diff()};
- 
+  private:
+    int append_index{0};
+};
+
+const auto mov_s{[](){
+  App_arr<m_diff, 8> knight, king;
+  std::array<App_arr<m_diff, 8>, 4> bishop, rook;
+  App_arr<App_arr<m_diff, 8>, 8> queen;
+
+  constexpr const std::array<std::array<int, 3>, 4> n_p{{{1, 1, 0}, {-1, 1, 1}, {1, -1, 2}, {-1, -1, 3}}};
+  constexpr const std::array<std::array<int, 3>, 4> rm{{{0, 1, 0}, {1, 0, 1}, {0, -1, 2}, {-1, 0, 3}}};
+
+  for (const auto&[yd, xd, ind]: n_p) {
+    knight.append(m_diff{2 * yd, xd}); knight.append(m_diff{yd, 2 * xd});
+    for (int x{1}; x < 9; x++) { bishop[ind].append(m_diff{x * yd, x * xd}); }
+  }
+
+  for (const auto&[yd, xd, ind]: rm) {
+    for (int x{1}; x < 9; x++) { rook[ind].append(m_diff{x * yd, x * xd}); }
+  }
+
+  for (int x{-1}; x < 2; x++) {
+    for (int y{-1}; y < 2; y++) {
+      if (y || x) { king.append(m_diff{y, x}); }
+    }
+  }
+
+  for (const auto& dir: bishop) { queen.append(dir); }
+  for (const auto& dir: rook) { queen.append(dir); }
+
+  return std::make_tuple(0, 0, knight.as_arr, [bishop](){
+    std::array<std::array<m_diff, 8>, 4> as_2D;
+    int dir_n{};
+    for (const App_arr<m_diff, 8>& dir: bishop) {
+      as_2D[dir_n++] = dir.as_arr;
+    }
+    return as_2D;
+  }(), [rook](){
+    std::array<std::array<m_diff, 8>, 4> as_2D;
+    int dir_n{};
+    for (const App_arr<m_diff, 8>& dir: rook) {
+      as_2D[dir_n++] = dir.as_arr;
+    }
+    return as_2D;
+  }(), [queen](){
+    std::array<std::array<m_diff, 8>, 8> as_2D;
+    int dir_n{};
+    for (const App_arr<m_diff, 8>& dir: queen.as_arr) {
+      as_2D[dir_n++] = dir.as_arr;
+    }
+    return as_2D;
+  }(), king.as_arr);
+}()};
+
 // board methods
 
 class C_board {
@@ -274,8 +297,11 @@ std::array<int, 2> king_loc(const b88 board, int color) {
  
 map_set<move_type> square_moves(const b88 board, const int y, const int x, const std::vector<move_type> past_moves = blank_move_list) {
   auto last_move{past_moves[0]};
-  int piece{board[y][x]}; int type{get_type(piece)}; int color{get_color(piece)};
+  int piece{board[y][x]};
+  int type{get_type(piece)};
+  int color{get_color(piece)};
   map_set<move_type> valid_moves;
+  
   if (type == 1) { // if pawn
     int dir{get_dir(color)};
     if (!board[y + dir][x]) { //moving forward
@@ -297,13 +323,13 @@ map_set<move_type> square_moves(const b88 board, const int y, const int x, const
       }  
     }
   } else if ((type == 2) || (type == 6)) { // if king or knight
-    const std::vector<m_diff>& space_iter{(mov_s.m1).at(type)};
+    const auto& space_iter{std::get<type>(mov_s)};
     for (const auto&[yd, xd]: space_iter) {
       int space{board[y + yd][x + xd]};
       if (!(space) || (color ^ get_color(space))) { valid_moves.append(move_type{y, x, y + yd, x + xd}); }
     }
   } else {
-    const auto& space_iter{(mov_s.m2).at(type)};
+    const auto& space_iter{std::get<type>(mov_s)};
     for (const auto& direction: space_iter) {
       for (const auto&[yd, xd]: direction) {  
         int space{board[y + yd][x + xd]};
@@ -570,10 +596,11 @@ int main() {
   std::cout << b;
 
   std::cout << '\n';
+
   std::cout << square_moves(b.pos, 0, 1);
 
   std::cout << '\n';
 
-  std::cout << "Compilation Sucessful\n";
+  std::cout << "\n\nCompilation Sucessful\n";
   return 0;
 }
